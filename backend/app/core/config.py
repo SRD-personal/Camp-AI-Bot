@@ -83,11 +83,11 @@ class Settings(BaseSettings):
         case_sensitive=True
     )
 
-    @field_validator('DATABASE_URL')
+    @field_validator('DATABASE_URL', mode='before')
     @classmethod
     def convert_database_url_to_async(cls, v: str) -> str:
         """Convert standard PostgreSQL URL to asyncpg format for async operations"""
-        if v.startswith('postgresql://') and '+asyncpg' not in v:
+        if isinstance(v, str) and v.startswith('postgresql://') and '+asyncpg' not in v:
             return v.replace('postgresql://', 'postgresql+asyncpg://')
         return v
 
@@ -111,8 +111,13 @@ class Settings(BaseSettings):
 
     @property
     def database_url_sync(self) -> str:
-        """Get synchronous database URL for Alembic"""
-        return self.DATABASE_URL.replace('+asyncpg', '')
+        """Get synchronous database URL for Alembic (removes +asyncpg if present)"""
+        url = self.DATABASE_URL
+        # Remove +asyncpg for sync operations (Alembic migrations)
+        if '+asyncpg' in url:
+            return url.replace('+asyncpg', '')
+        # If URL is plain postgresql://, it's already sync-compatible
+        return url
 
 
 # Global settings instance
