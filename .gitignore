@@ -1,0 +1,92 @@
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/*.so
+.Python
+**/build/
+**/develop-eggs/
+**/dist/
+**/downloads/
+**/eggs/
+**/.eggs/
+**/lib/
+**/lib64/
+**/parts/
+**/sdist/
+**/var/
+**/wheels/
+**/pip-wheel-metadata/
+**/share/python-wheels/
+**/*.egg-info/
+.installed.cfg
+**/*.egg
+
+# Virtual Environment
+**/venv/
+**/ENV/
+**/env/
+**.venv
+
+# Environment variables
+**/.env
+**/.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads
+backend/uploads/
+**/uploads/
+
+# Logs
+**/*.log
+
+# Database
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Flutter
+**/flutter_mobile/.dart_tool/
+**/flutter_mobile/.flutter-plugins
+**/flutter_mobile/.flutter-plugins-dependencies
+**/flutter_mobile/.packages
+**/flutter_mobile/build/
+**/.metadata
+
+# Android
+**/mobile/android_app/.gradle/
+**/mobile/android_app/android/.gradle/
+**/mobile/android_app/android/captures/
+**/mobile/android_app/android/local.properties
+**/mobile/android_app/android/app/google-services.json
+**/android/key.properties
+
+# iOS
+**/mobile/android_app/ios/Flutter/Flutter.framework
+**/mobile/android_app/ios/Flutter/Flutter.podspec
+**/mobile/android_app/ios/Flutter/Generated.xcconfig
+**/mobile/android_app/ios/Flutter/app.flx
+**/mobile/android_app/ios/Flutter/app.zip
+**/mobile/android_app/ios/Flutter/flutter_assets/
+**/mobile/android_app/ios/ServiceDefinitions.json
+**/mobile/android_app/ios/Runner/GeneratedPluginRegistrant.*
+
+# Testing
+**/.pytest_cache/
+**/coverage.xml
+**/*.cover
+**/.coverage
+**/htmlcov/
+
+# Documentation
+**/site/
