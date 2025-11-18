@@ -83,6 +83,14 @@ class Settings(BaseSettings):
         case_sensitive=True
     )
 
+    @field_validator('DATABASE_URL')
+    @classmethod
+    def convert_database_url_to_async(cls, v: str) -> str:
+        """Convert standard PostgreSQL URL to asyncpg format for async operations"""
+        if v.startswith('postgresql://') and '+asyncpg' not in v:
+            return v.replace('postgresql://', 'postgresql+asyncpg://')
+        return v
+
     @field_validator('CORS_ORIGINS')
     @classmethod
     def parse_cors_origins(cls, v: str) -> List[str]:
