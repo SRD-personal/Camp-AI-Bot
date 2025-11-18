@@ -1,0 +1,62 @@
+name: kit_campusai
+description: KIT CampusAI mobile application
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+
+  # Google Sign-In
+  google_sign_in: ^6.1.6
+  firebase_auth: ^4.15.0
+  firebase_core: ^2.24.0
+
+  # HTTP & API
+  dio: ^5.4.0
+  http: ^1.1.2
+
+  # Storage
+  flutter_secure_storage: ^9.0.0
+  shared_preferences: ^2.2.2
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # UI Components
+  flutter_chat_ui: ^1.6.10
+  intl: ^0.18.1
+  cached_network_image: ^3.3.1
+  flutter_svg: ^2.0.9
+  lottie: ^2.7.0
+
+  # Utilities
+  uuid: ^4.2.2
+  path_provider: ^2.1.1
+  url_launcher: ^6.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.7
+  hive_generator: ^2.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/lottie/
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
