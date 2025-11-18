@@ -55,8 +55,8 @@ class KnowledgeChunk(Base):
     chunk_index = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
     embedding = Column(Vector(settings.PGVECTOR_DIMENSION))
-    
-    metadata = Column(JSON, nullable=True)  # page number, section, etc.
+
+    chunk_metadata = Column(JSON, nullable=True)  # page number, section, etc.
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     

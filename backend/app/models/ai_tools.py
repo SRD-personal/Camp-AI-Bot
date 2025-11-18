@@ -73,8 +73,8 @@ class ToolData(Base):
     title = Column(String(500), nullable=True)
     content = Column(Text, nullable=False)
     embedding = Column(Vector(settings.PGVECTOR_DIMENSION))
-    
-    metadata = Column(JSON, nullable=True)
+
+    tool_metadata = Column(JSON, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -63,11 +63,11 @@ class RAGService:
         """
         # Build query for pgvector similarity search
         query = text("""
-            SELECT 
+            SELECT
                 kc.id,
                 kc.content,
                 kc.chunk_index,
-                kc.metadata,
+                kc.chunk_metadata,
                 d.title as document_title,
                 d.department,
                 d.file_name,
@@ -98,7 +98,7 @@ class RAGService:
                 'id': str(row.id),
                 'content': row.content,
                 'chunk_index': row.chunk_index,
-                'metadata': row.metadata,
+                'metadata': row.chunk_metadata,
                 'document_title': row.document_title,
                 'department': row.department,
                 'file_name': row.file_name,
@@ -125,13 +125,13 @@ class RAGService:
             List of relevant tool data with similarity scores
         """
         query = text("""
-            SELECT 
+            SELECT
                 td.id,
                 td.title,
                 td.content,
                 td.source_url,
                 td.source_type,
-                td.metadata,
+                td.tool_metadata,
                 at.name as tool_name,
                 1 - (td.embedding <=> :query_embedding::vector) as similarity
             FROM tool_data td
@@ -162,7 +162,7 @@ class RAGService:
                 'content': row.content,
                 'source_url': row.source_url,
                 'source_type': row.source_type,
-                'metadata': row.metadata,
+                'metadata': row.tool_metadata,
                 'tool_name': row.tool_name,
                 'similarity_score': float(row.similarity)
             }
