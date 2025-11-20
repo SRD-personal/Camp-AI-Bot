@@ -17,26 +17,44 @@ This guide explains how to populate the knowledge base with content from the KIT
 
 ## 🚀 Quick Start
 
-### Option 1: Run on Render.com (Recommended)
-
-The scraper can run directly on Render using the deployed database:
+### Basic Usage (Skip Existing URLs)
 
 ```bash
-# Set environment variables
-export DATABASE_URL="<your-render-postgres-url>"
-export GEMINI_API_KEY="<your-gemini-api-key>"
-
-# Run scraper
 cd backend
+
+# First time - scrapes and populates
+python populate_knowledge_base.py
+
+# Second time - automatically skips existing URLs (no duplicates!)
 python populate_knowledge_base.py
 ```
 
-### Option 2: Run Locally
+### Full Refresh (Clear & Re-scrape)
 
 ```bash
-# Make sure .env is configured with DATABASE_URL and GEMINI_API_KEY
-cd backend
-python populate_knowledge_base.py
+# Delete all existing web documents and re-scrape everything
+python populate_knowledge_base.py --clear-existing
+```
+
+### Scrape More Pages
+
+```bash
+# Scrape up to 100 pages instead of default 50
+python populate_knowledge_base.py --max-pages 100
+```
+
+### Allow Duplicates (Disable Deduplication)
+
+```bash
+# Allow duplicate URLs (creates new documents even if URL exists)
+python populate_knowledge_base.py --allow-duplicates
+```
+
+### Combine Options
+
+```bash
+# Full refresh with 100 pages
+python populate_knowledge_base.py --clear-existing --max-pages 100
 ```
 
 ## 📖 What It Does
@@ -46,25 +64,37 @@ The scraper will:
 1. **Crawl** https://kitcbe.com/ starting from homepage
 2. **Extract** text content from all pages (up to 50 pages by default)
 3. **Follow** internal links automatically
-4. **Chunk** content into ~1000 character segments with 200 char overlap
-5. **Generate** embeddings using Gemini API
-6. **Upload** to knowledge base automatically
-7. **Save** backup to `kit_scraped_data.json`
+4. **Check** for duplicates - skips URLs that already exist (deduplication enabled by default)
+5. **Chunk** content into ~1000 character segments with 200 char overlap
+6. **Generate** embeddings using Gemini API
+7. **Upload** to knowledge base automatically
+8. **Save** backup to `kit_scraped_data.json`
+9. **Report** summary with added vs skipped counts
 
-## ⚙️ Configuration
+## ⚙️ CLI Options
 
-Edit `populate_knowledge_base.py` to customize:
-
-```python
-# Maximum pages to scrape
-await scraper.crawl(max_pages=50)  # Default: 50
-
-# Chunk size and overlap
-chunk_size = 1000  # Characters per chunk
-chunk_overlap = 200  # Overlap between chunks
+View all options:
+```bash
+python populate_knowledge_base.py --help
 ```
 
+Available flags:
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--clear-existing` | Delete all web documents before scraping | False |
+| `--allow-duplicates` | Disable deduplication (allow duplicates) | False |
+| `--max-pages N` | Maximum pages to scrape | 50 |
+
+**Deduplication Behavior:**
+- ✅ **By default**: Skips URLs that already exist in database
+- ⏭️ **On skip**: Logs message and increments skipped count
+- 🆕 **On add**: Creates new document and increments added count
+- 📊 **Summary**: Shows "Added: X, Skipped: Y" at the end
+
 ## 📊 Expected Output
+
+### First Run (All New)
 
 ```
 ======================================================================
@@ -72,6 +102,7 @@ KIT Knowledge Base Population Script
 ======================================================================
 
 [1/3] Scraping KIT website...
+Deduplication enabled: Will skip existing URLs
 Crawling: https://kitcbe.com/
 ✓ Scraped: Home - Kalaimagal Institute of Technology (2456 chars)
 Crawling: https://kitcbe.com/about/
@@ -82,6 +113,7 @@ Progress: 10 pages scraped, 15 in queue
 ✓ Saved scraped data to kit_scraped_data.json
 
 [2/3] Populating knowledge base...
+Deduplication enabled: Will skip existing URLs
 Processing: Home - Kalaimagal Institute of Technology
   Created 3 chunks
   ✓ Uploaded: Home - Kalaimagal Institute of Technology
@@ -90,12 +122,39 @@ Processing: About KIT
   ✓ Uploaded: About KIT
 ...
 ✓ Knowledge base population complete!
+  Added: 50, Skipped: 0
 
 [3/3] Summary
 ======================================================================
 ✓ Scraped 50 pages
-✓ Populated knowledge base
+✓ Added 50 new documents
+✓ Skipped 0 existing documents
 ✓ Total content: 127,543 characters
+======================================================================
+```
+
+### Second Run (With Existing Data)
+
+```
+[2/3] Populating knowledge base...
+Deduplication enabled: Will skip existing URLs
+Processing: Home - Kalaimagal Institute of Technology
+  ⏭️  Skipping (already exists): Home - Kalaimagal Institute of Technology
+Processing: About KIT
+  ⏭️  Skipping (already exists): About KIT
+Processing: New Course Page
+  Created 2 chunks
+  ✓ Uploaded: New Course Page
+...
+✓ Knowledge base population complete!
+  Added: 5, Skipped: 45
+
+[3/3] Summary
+======================================================================
+✓ Scraped 50 pages
+✓ Added 5 new documents
+✓ Skipped 45 existing documents
+✓ Total content: 135,892 characters
 ======================================================================
 ```
 
@@ -208,21 +267,33 @@ async def main():
 
 ## 🔄 Re-running the Scraper
 
-**Note**: Running the scraper multiple times will create **duplicate** documents.
+**Good News**: Deduplication is now **automatic**! You can safely re-run the scraper.
 
-To avoid duplicates:
+### Behavior on Re-run
 
-1. **Delete existing web documents** first:
-   ```sql
-   DELETE FROM knowledge_chunks
-   WHERE document_id IN (
-     SELECT id FROM documents WHERE file_type = 'web'
-   );
+**Default (Recommended)**:
+```bash
+python populate_knowledge_base.py
+```
+- ✅ Skips existing URLs automatically
+- 🆕 Only adds new pages that weren't in the database
+- 📊 Shows "Added: X, Skipped: Y" in summary
 
-   DELETE FROM documents WHERE file_type = 'web';
-   ```
+**Full Refresh (Clear & Re-scrape)**:
+```bash
+python populate_knowledge_base.py --clear-existing
+```
+- 🗑️ Deletes all existing web documents first
+- 🔄 Scrapes everything fresh
+- ✅ Useful when website content has changed significantly
 
-2. **Or add deduplication logic** to the scraper
+**Allow Duplicates (Not Recommended)**:
+```bash
+python populate_knowledge_base.py --allow-duplicates
+```
+- ⚠️ Creates duplicate documents for same URLs
+- ❌ Will result in duplicate search results
+- 🔧 Only use for testing or special cases
 
 ## 🎯 Next Steps
 
