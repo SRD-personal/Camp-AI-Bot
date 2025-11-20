@@ -6,13 +6,16 @@ This can be run even without internet access to external sites
 import asyncio
 import sys
 import uuid
+import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from app.core.database import AsyncSessionLocal
 from app.models.document import Document
+from app.models.document import KnowledgeChunk
 from app.services.document_service import DocumentService
+from sqlalchemy import select, delete
 
 # Sample KIT content
 SAMPLE_CONTENT = [
@@ -205,12 +208,47 @@ Prior appointment recommended. Contact admissions office to schedule a visit.
 ]
 
 
-async def populate_sample_content():
+async def clear_sample_documents():
+    """Clear all existing sample documents from knowledge base"""
+    print("Clearing existing sample documents...")
+
+    async with AsyncSessionLocal() as db:
+        try:
+            # Delete all chunks for sample documents (file_type='web' with 'sample_' prefix)
+            stmt = delete(KnowledgeChunk).where(
+                KnowledgeChunk.document_id.in_(
+                    select(Document.id).where(Document.file_name.like('sample_%'))
+                )
+            )
+            result = await db.execute(stmt)
+            chunks_deleted = result.rowcount
+
+            # Delete all sample documents
+            stmt = delete(Document).where(Document.file_name.like('sample_%'))
+            result = await db.execute(stmt)
+            docs_deleted = result.rowcount
+
+            await db.commit()
+
+            print(f"✓ Deleted {docs_deleted} sample documents and {chunks_deleted} chunks\n")
+
+        except Exception as e:
+            print(f"✗ Failed to clear existing documents: {str(e)}\n")
+            await db.rollback()
+            raise
+
+
+async def populate_sample_content(skip_existing: bool = True):
     """Populate knowledge base with sample KIT content"""
     print("=" * 70)
     print("Adding Sample KIT Content to Knowledge Base")
     print("=" * 70)
+    if skip_existing:
+        print("Deduplication enabled: Will skip existing documents")
     print()
+
+    added_count = 0
+    skipped_count = 0
 
     async with AsyncSessionLocal() as db:
         doc_service = DocumentService(db)
@@ -219,12 +257,25 @@ async def populate_sample_content():
             print(f"[{idx}/{len(SAMPLE_CONTENT)}] Processing: {sample['title']}")
 
             try:
+                # Check if sample already exists (deduplication)
+                file_name = f"sample_{idx}.txt"
+
+                if skip_existing:
+                    stmt = select(Document).where(Document.file_name == file_name)
+                    result = await db.execute(stmt)
+                    existing_doc = result.scalar_one_or_none()
+
+                    if existing_doc:
+                        print(f"  ⏭️  Skipping (already exists): {sample['title']}")
+                        skipped_count += 1
+                        continue
+
                 # Create document
                 document = Document(
                     id=uuid.uuid4(),
                     title=sample['title'],
                     description=sample['description'],
-                    file_name=f"sample_{idx}.txt",
+                    file_name=file_name,
                     file_type='web',
                     file_size=len(sample['content']),
                     status='processing',
@@ -245,6 +296,7 @@ async def populate_sample_content():
                 document.status = 'ready'
                 await db.commit()
 
+                added_count += 1
                 print(f"  ✓ Added: {sample['title']}")
 
             except Exception as e:
@@ -254,9 +306,48 @@ async def populate_sample_content():
 
     print()
     print("=" * 70)
-    print(f"✓ Successfully added {len(SAMPLE_CONTENT)} sample documents")
+    print(f"✓ Added {added_count} new documents")
+    print(f"✓ Skipped {skipped_count} existing documents")
     print("=" * 70)
 
 
 if __name__ == "__main__":
-    asyncio.run(populate_sample_content())
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Add sample KIT content to knowledge base",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Normal run (skip existing)
+  python add_sample_content.py
+
+  # Clear existing sample documents before adding
+  python add_sample_content.py --clear-existing
+
+  # Allow duplicates (don't skip existing)
+  python add_sample_content.py --allow-duplicates
+        """
+    )
+
+    parser.add_argument(
+        '--clear-existing',
+        action='store_true',
+        help='Delete all existing sample documents before adding (useful for refresh)'
+    )
+
+    parser.add_argument(
+        '--allow-duplicates',
+        action='store_true',
+        help='Allow duplicate documents (by default, existing documents are skipped)'
+    )
+
+    args = parser.parse_args()
+
+    # Run with options
+    async def main():
+        if args.clear_existing:
+            await clear_sample_documents()
+
+        await populate_sample_content(skip_existing=not args.allow_duplicates)
+
+    asyncio.run(main())

@@ -8,6 +8,7 @@ import aiohttp
 import re
 import sys
 import logging
+import argparse
 from typing import Set, List, Dict, Any, Optional
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
@@ -22,9 +23,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from app.core.config import settings
 from app.core.database import get_async_database_url, AsyncSessionLocal
 from app.models.document import Document
+from app.models.document import KnowledgeChunk
 from app.services.rag_service import RAGService
 from app.services.document_service import DocumentService
-from sqlalchemy import select
+from sqlalchemy import select, delete
 import uuid
 
 # Configure logging
@@ -266,6 +268,9 @@ class KnowledgeBasePopulator:
     def __init__(self):
         self.chunk_size = 1000  # Characters per chunk
         self.chunk_overlap = 200  # Overlap between chunks
+        self.skipped_count = 0
+        self.updated_count = 0
+        self.added_count = 0
 
     def chunk_text(self, text: str) -> List[str]:
         """
@@ -302,14 +307,50 @@ class KnowledgeBasePopulator:
 
         return chunks
 
-    async def populate(self, scraped_pages: List[Dict[str, Any]]):
+    async def clear_existing_documents(self):
+        """
+        Clear all existing web documents from knowledge base
+
+        This is useful when you want to re-scrape and replace all content
+        """
+        logger.info("Clearing existing web documents...")
+
+        async with AsyncSessionLocal() as db:
+            try:
+                # Delete all chunks for web documents
+                stmt = delete(KnowledgeChunk).where(
+                    KnowledgeChunk.document_id.in_(
+                        select(Document.id).where(Document.file_type == 'web')
+                    )
+                )
+                result = await db.execute(stmt)
+                chunks_deleted = result.rowcount
+
+                # Delete all web documents
+                stmt = delete(Document).where(Document.file_type == 'web')
+                result = await db.execute(stmt)
+                docs_deleted = result.rowcount
+
+                await db.commit()
+
+                logger.info(f"✓ Deleted {docs_deleted} documents and {chunks_deleted} chunks")
+
+            except Exception as e:
+                logger.error(f"✗ Failed to clear existing documents: {str(e)}")
+                await db.rollback()
+                raise
+
+    async def populate(self, scraped_pages: List[Dict[str, Any]], skip_existing: bool = True):
         """
         Populate knowledge base with scraped content
 
         Args:
             scraped_pages: List of scraped page data
+            skip_existing: If True, skip URLs that already exist (default: True)
         """
         logger.info(f"Populating knowledge base with {len(scraped_pages)} pages")
+        if skip_existing:
+            logger.info("Deduplication enabled: Will skip existing URLs")
 
         # Create database session
         async with AsyncSessionLocal() as db:
@@ -319,6 +360,17 @@ class KnowledgeBasePopulator:
             for page in scraped_pages:
                 try:
                     logger.info(f"Processing: {page['title']}")
+
+                    # Check if URL already exists (deduplication)
+                    if skip_existing:
+                        stmt = select(Document).where(Document.file_name == page['url'])
+                        result = await db.execute(stmt)
+                        existing_doc = result.scalar_one_or_none()
+
+                        if existing_doc:
+                            logger.info(f"  ⏭️  Skipping (already exists): {page['title']}")
+                            self.skipped_count += 1
+                            continue
 
                     # Create document
                     document = Document(
@@ -350,6 +402,7 @@ class KnowledgeBasePopulator:
                     document.status = 'ready'
                     await db.commit()
 
+                    self.added_count += 1
                     logger.info(f"  ✓ Uploaded: {page['title']}")
 
                 except Exception as e:
@@ -358,35 +411,89 @@ class KnowledgeBasePopulator:
                     continue
 
         logger.info("✓ Knowledge base population complete!")
+        logger.info(f"  Added: {self.added_count}, Skipped: {self.skipped_count}")
 
 
-async def main():
+async def main(args):
     """Main entry point"""
     logger.info("=" * 70)
     logger.info("KIT Knowledge Base Population Script")
     logger.info("=" * 70)
 
+    # Initialize populator
+    populator = KnowledgeBasePopulator()
+
+    # Step 0: Clear existing documents if requested
+    if args.clear_existing:
+        logger.info("\n[0/3] Clearing existing web documents...")
+        await populator.clear_existing_documents()
+
     # Step 1: Scrape website
     logger.info("\n[1/3] Scraping KIT website...")
     scraper = KITWebScraper("https://kitcbe.com/")
-    await scraper.crawl(max_pages=50)  # Limit to 50 pages for now
+    await scraper.crawl(max_pages=args.max_pages)
 
     # Save to JSON for backup
     scraper.save_to_json()
 
     # Step 2: Populate knowledge base
     logger.info("\n[2/3] Populating knowledge base...")
-    populator = KnowledgeBasePopulator()
-    await populator.populate(scraper.scraped_pages)
+    await populator.populate(scraper.scraped_pages, skip_existing=not args.allow_duplicates)
 
     # Step 3: Summary
     logger.info("\n[3/3] Summary")
     logger.info("=" * 70)
     logger.info(f"✓ Scraped {len(scraper.scraped_pages)} pages")
-    logger.info(f"✓ Populated knowledge base")
+    logger.info(f"✓ Added {populator.added_count} new documents")
+    logger.info(f"✓ Skipped {populator.skipped_count} existing documents")
     logger.info(f"✓ Total content: {sum(len(p['content']) for p in scraper.scraped_pages):,} characters")
     logger.info("=" * 70)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Scrape KIT website and populate knowledge base",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Normal run (skip existing URLs)
+  python populate_knowledge_base.py
+
+  # Clear existing documents before scraping
+  python populate_knowledge_base.py --clear-existing
+
+  # Allow duplicates (don't skip existing URLs)
+  python populate_knowledge_base.py --allow-duplicates
+
+  # Scrape more pages
+  python populate_knowledge_base.py --max-pages 100
+
+  # Combine options
+  python populate_knowledge_base.py --clear-existing --max-pages 100
+        """
+    )
+
+    parser.add_argument(
+        '--clear-existing',
+        action='store_true',
+        help='Delete all existing web documents before scraping (useful for full refresh)'
+    )
+
+    parser.add_argument(
+        '--allow-duplicates',
+        action='store_true',
+        help='Allow duplicate URLs (by default, existing URLs are skipped)'
+    )
+
+    parser.add_argument(
+        '--max-pages',
+        type=int,
+        default=50,
+        help='Maximum number of pages to scrape (default: 50)'
+    )
+
+    args = parser.parse_args()
+
+    # Run main function
+    asyncio.run(main(args))
