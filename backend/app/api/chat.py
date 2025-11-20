@@ -1,6 +1,8 @@
 """
 Chat API endpoints for RAG chatbot
 """
+import logging
+import traceback
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Header
@@ -14,6 +16,9 @@ from app.services.guardrail_service import GuardrailService
 from app.models.user import User
 from app.models.chat import ChatSession, Message
 from app.models.violation import ViolationLog
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
@@ -67,21 +72,27 @@ async def chat_query(
 ):
     """
     Submit a query to the RAG chatbot
-    
+
     - Checks input guardrails
     - Retrieves relevant knowledge
     - Generates response with Gemini
     - Checks output guardrails
     - Logs conversation
     """
+    logger.info(f"Chat query received from user {user.id}: {request.query[:100]}")
+
     try:
         # Initialize services
+        logger.debug("Initializing services...")
         guardrail_service = GuardrailService()
         rag_service = RAGService(db)
+        logger.debug("Services initialized successfully")
         
         # Check input guardrails
+        logger.debug("Checking input guardrails...")
         input_check = await guardrail_service.check_input(request.query, str(user.id))
-        
+        logger.debug(f"Input guardrail check complete: safe={input_check.is_safe}")
+
         if not input_check.is_safe:
             # Log high severity violations
             for violation in input_check.violations:
@@ -103,6 +114,7 @@ async def chat_query(
             )
         
         # Get or create chat session
+        logger.debug(f"Getting/creating chat session (conversation_id={request.conversation_id})...")
         if request.conversation_id:
             stmt = select(ChatSession).where(
                 ChatSession.id == request.conversation_id,
@@ -110,12 +122,14 @@ async def chat_query(
             )
             result = await db.execute(stmt)
             session = result.scalar_one_or_none()
-            
+
             if not session:
+                logger.warning(f"Conversation {request.conversation_id} not found")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Conversation not found"
                 )
+            logger.debug(f"Found existing session: {session.id}")
         else:
             # Create new session
             session = ChatSession(
@@ -126,25 +140,35 @@ async def chat_query(
             db.add(session)
             await db.commit()
             await db.refresh(session)
+            logger.debug(f"Created new session: {session.id}")
         
         # Get chat history
+        logger.debug("Fetching chat history...")
         stmt = select(Message).where(Message.session_id == session.id).order_by(Message.created_at.desc()).limit(10)
         result = await db.execute(stmt)
         history_messages = result.scalars().all()
-        
+        logger.debug(f"Found {len(history_messages)} previous messages")
+
         chat_history = [
             {"role": msg.role, "content": msg.content}
             for msg in reversed(history_messages)
         ]
-        
+
         # Query RAG service
-        rag_result = await rag_service.query(
-            query=input_check.sanitized_text,
-            user_id=str(user.id),
-            department=user.department,
-            chat_history=chat_history,
-            use_tools=True
-        )
+        logger.info(f"Querying RAG service for: {input_check.sanitized_text[:100]}")
+        try:
+            rag_result = await rag_service.query(
+                query=input_check.sanitized_text,
+                user_id=str(user.id),
+                department=user.department,
+                chat_history=chat_history,
+                use_tools=True
+            )
+            logger.info(f"RAG query successful. Found {len(rag_result.get('sources', []))} sources")
+        except Exception as rag_error:
+            logger.error(f"RAG service error: {str(rag_error)}")
+            logger.error(f"RAG traceback: {traceback.format_exc()}")
+            raise
         
         # Check output guardrails
         output_check = await guardrail_service.check_output(
@@ -216,9 +240,14 @@ async def chat_query(
     except HTTPException:
         raise
     except Exception as e:
+        # Log detailed error information
+        logger.error(f"Chat query failed: {str(e)}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+        logger.error(f"User: {user.id}, Query: {request.query[:200]}")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Query processing failed: {str(e)}"
+            detail=f"Query processing failed: {str(e)}. Check server logs for details."
         )
 
 
