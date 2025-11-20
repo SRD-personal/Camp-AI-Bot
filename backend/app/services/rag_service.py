@@ -52,44 +52,68 @@ class RAGService:
     ) -> List[Dict[str, Any]]:
         """
         Search knowledge base using vector similarity
-        
+
         Args:
             query_embedding: Query embedding vector
             top_k: Number of results to return
             department: Optional department filter
-            
+
         Returns:
             List of relevant chunks with similarity scores
         """
+        # Format embedding as PostgreSQL array string for pgvector
+        embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+
         # Build query for pgvector similarity search
-        query = text("""
-            SELECT
-                kc.id,
-                kc.content,
-                kc.chunk_index,
-                kc.chunk_metadata,
-                d.title as document_title,
-                d.department,
-                d.file_name,
-                1 - (kc.embedding <=> :query_embedding::vector) as similarity
-            FROM knowledge_chunks kc
-            JOIN documents d ON kc.document_id = d.id
-            WHERE d.status = 'ready'
-            AND 1 - (kc.embedding <=> :query_embedding::vector) > :threshold
-            """ + (f"AND d.department = :department" if department else "") + """
-            ORDER BY kc.embedding <=> :query_embedding::vector
-            LIMIT :top_k
-        """)
-        
-        params = {
-            'query_embedding': str(query_embedding),
-            'threshold': self.similarity_threshold,
-            'top_k': top_k
-        }
-        
         if department:
-            params['department'] = department
-        
+            query = text("""
+                SELECT
+                    kc.id,
+                    kc.content,
+                    kc.chunk_index,
+                    kc.chunk_metadata,
+                    d.title as document_title,
+                    d.department,
+                    d.file_name,
+                    1 - (kc.embedding <=> :query_embedding::vector) as similarity
+                FROM knowledge_chunks kc
+                JOIN documents d ON kc.document_id = d.id
+                WHERE d.status = 'ready'
+                AND d.department = :department
+                AND 1 - (kc.embedding <=> :query_embedding::vector) > :threshold
+                ORDER BY kc.embedding <=> :query_embedding::vector
+                LIMIT :top_k
+            """)
+            params = {
+                'query_embedding': embedding_str,
+                'threshold': self.similarity_threshold,
+                'top_k': top_k,
+                'department': department
+            }
+        else:
+            query = text("""
+                SELECT
+                    kc.id,
+                    kc.content,
+                    kc.chunk_index,
+                    kc.chunk_metadata,
+                    d.title as document_title,
+                    d.department,
+                    d.file_name,
+                    1 - (kc.embedding <=> :query_embedding::vector) as similarity
+                FROM knowledge_chunks kc
+                JOIN documents d ON kc.document_id = d.id
+                WHERE d.status = 'ready'
+                AND 1 - (kc.embedding <=> :query_embedding::vector) > :threshold
+                ORDER BY kc.embedding <=> :query_embedding::vector
+                LIMIT :top_k
+            """)
+            params = {
+                'query_embedding': embedding_str,
+                'threshold': self.similarity_threshold,
+                'top_k': top_k
+            }
+
         result = await self.db.execute(query, params)
         rows = result.fetchall()
         
@@ -115,43 +139,67 @@ class RAGService:
     ) -> List[Dict[str, Any]]:
         """
         Search AI tool data using vector similarity
-        
+
         Args:
             query_embedding: Query embedding vector
             tool_id: Optional tool ID filter
             top_k: Number of results to return
-            
+
         Returns:
             List of relevant tool data with similarity scores
         """
-        query = text("""
-            SELECT
-                td.id,
-                td.title,
-                td.content,
-                td.source_url,
-                td.source_type,
-                td.tool_metadata,
-                at.name as tool_name,
-                1 - (td.embedding <=> :query_embedding::vector) as similarity
-            FROM tool_data td
-            JOIN ai_tools at ON td.tool_id = at.id
-            WHERE at.status = 'active'
-            AND 1 - (td.embedding <=> :query_embedding::vector) > :threshold
-            """ + (f"AND td.tool_id = :tool_id" if tool_id else "") + """
-            ORDER BY td.embedding <=> :query_embedding::vector
-            LIMIT :top_k
-        """)
-        
-        params = {
-            'query_embedding': str(query_embedding),
-            'threshold': self.similarity_threshold,
-            'top_k': top_k
-        }
-        
+        # Format embedding as PostgreSQL array string for pgvector
+        embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+
         if tool_id:
-            params['tool_id'] = tool_id
-        
+            query = text("""
+                SELECT
+                    td.id,
+                    td.title,
+                    td.content,
+                    td.source_url,
+                    td.source_type,
+                    td.tool_metadata,
+                    at.name as tool_name,
+                    1 - (td.embedding <=> :query_embedding::vector) as similarity
+                FROM tool_data td
+                JOIN ai_tools at ON td.tool_id = at.id
+                WHERE at.status = 'active'
+                AND td.tool_id = :tool_id
+                AND 1 - (td.embedding <=> :query_embedding::vector) > :threshold
+                ORDER BY td.embedding <=> :query_embedding::vector
+                LIMIT :top_k
+            """)
+            params = {
+                'query_embedding': embedding_str,
+                'threshold': self.similarity_threshold,
+                'top_k': top_k,
+                'tool_id': tool_id
+            }
+        else:
+            query = text("""
+                SELECT
+                    td.id,
+                    td.title,
+                    td.content,
+                    td.source_url,
+                    td.source_type,
+                    td.tool_metadata,
+                    at.name as tool_name,
+                    1 - (td.embedding <=> :query_embedding::vector) as similarity
+                FROM tool_data td
+                JOIN ai_tools at ON td.tool_id = at.id
+                WHERE at.status = 'active'
+                AND 1 - (td.embedding <=> :query_embedding::vector) > :threshold
+                ORDER BY td.embedding <=> :query_embedding::vector
+                LIMIT :top_k
+            """)
+            params = {
+                'query_embedding': embedding_str,
+                'threshold': self.similarity_threshold,
+                'top_k': top_k
+            }
+
         result = await self.db.execute(query, params)
         rows = result.fetchall()
         
