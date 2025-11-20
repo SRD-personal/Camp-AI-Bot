@@ -162,7 +162,7 @@ class DocumentService:
                     chunk_index=i,
                     content=chunk_text,
                     embedding=embedding,
-                    metadata={'chunk_size': len(chunk_text)}
+                    chunk_metadata={'chunk_size': len(chunk_text)}
                 )
                 
                 self.db.add(chunk)
@@ -181,3 +181,41 @@ class DocumentService:
             document.status = "failed"
             await self.db.commit()
             raise ValueError(f"Failed to process document: {str(e)}")
+
+    async def process_document_content(
+        self,
+        document_id,
+        content: str,
+        file_type: str = 'web'
+    ) -> None:
+        """
+        Process text content and create embeddings
+
+        Args:
+            document_id: Document ID
+            content: Text content to process
+            file_type: Type of content (default: 'web')
+        """
+        try:
+            # Chunk text
+            chunks = self.chunk_text(content)
+
+            # Create embeddings for each chunk
+            for i, chunk_text in enumerate(chunks):
+                embedding = await self.generate_embedding(chunk_text)
+
+                chunk = KnowledgeChunk(
+                    document_id=document_id,
+                    chunk_index=i,
+                    content=chunk_text,
+                    embedding=embedding,
+                    chunk_metadata={'chunk_size': len(chunk_text), 'source_type': file_type}
+                )
+
+                self.db.add(chunk)
+
+            await self.db.commit()
+
+        except Exception as e:
+            await self.db.rollback()
+            raise ValueError(f"Failed to process content: {str(e)}")

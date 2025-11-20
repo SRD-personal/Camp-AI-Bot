@@ -2,6 +2,7 @@
 RAG (Retrieval-Augmented Generation) service for knowledge base chatbot
 """
 import re
+import random
 from typing import List, Dict, Any, Optional
 import google.generativeai as genai
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,13 +17,61 @@ class RAGService:
     
     def __init__(self, db: AsyncSession):
         self.db = db
-        
+
         # Configure Gemini
         genai.configure(api_key=settings.GEMINI_API_KEY)
         self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
         self.embedding_model = 'models/embedding-001'
-        
+
         self.similarity_threshold = settings.SIMILARITY_THRESHOLD
+
+        # Greeting patterns
+        self.greeting_patterns = [
+            r'\b(hi|hello|hey|hiya|greetings|good\s+(morning|afternoon|evening|day))\b',
+            r'\b(what\'s\s+up|whats\s+up|sup|howdy)\b',
+            r'\b(how\s+are\s+you|how\s+do\s+you\s+do)\b',
+            r'^(hi|hello|hey)[\s!?.]*$'
+        ]
+
+        # Greeting responses
+        self.greeting_responses = [
+            "Hello! I'm KIT CampusAI, your virtual assistant for Kalaimagal Institute of Technology. How can I help you today?",
+            "Hi there! Welcome to KIT CampusAI. I'm here to answer your questions about Kalaimagal Institute of Technology. What would you like to know?",
+            "Hey! I'm your KIT assistant. Feel free to ask me anything about courses, admissions, campus facilities, or anything related to KIT!",
+            "Greetings! I'm here to help you with information about Kalaimagal Institute of Technology. What can I assist you with?",
+            "Hello! Welcome to KIT CampusAI. Ask me anything about Kalaimagal Institute of Technology and I'll do my best to help!"
+        ]
+
+    def _is_greeting(self, text: str) -> bool:
+        """
+        Check if the text is a greeting
+
+        Args:
+            text: Input text to check
+
+        Returns:
+            True if text is a greeting
+        """
+        text_lower = text.lower().strip()
+
+        # Check against greeting patterns
+        for pattern in self.greeting_patterns:
+            if re.search(pattern, text_lower, re.IGNORECASE):
+                # Make sure it's not a complex question
+                # Simple heuristic: greetings are usually short
+                if len(text.split()) <= 5:
+                    return True
+
+        return False
+
+    def _generate_greeting_response(self) -> str:
+        """
+        Generate a friendly greeting response
+
+        Returns:
+            Random greeting response
+        """
+        return random.choice(self.greeting_responses)
     
     async def generate_embedding(self, text: str) -> List[float]:
         """
@@ -283,17 +332,25 @@ Context:
     ) -> Dict[str, Any]:
         """
         Process a query through the RAG pipeline
-        
+
         Args:
             query: User query
             user_id: User ID
             department: Optional department filter
             chat_history: Optional chat history
             use_tools: Whether to search tool data
-            
+
         Returns:
             Response with generated answer and sources
         """
+        # Check if query is a greeting
+        if self._is_greeting(query):
+            return {
+                'response': self._generate_greeting_response(),
+                'sources': [],
+                'confidence': 1.0
+            }
+
         # Generate query embedding
         query_embedding = await self.generate_embedding(query)
         
