@@ -1,7 +1,8 @@
+// KIT CampusAI Mobile App
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+// import 'package:hive_flutter/hive_flutter.dart';  // Temporarily disabled
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -9,13 +10,13 @@ import 'services/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Firebase
   await Firebase.initializeApp();
-  
-  // Initialize Hive
-  await Hive.initFlutter();
-  
+
+  // Initialize Hive - Temporarily disabled due to build issues
+  // await Hive.initFlutter();
+
   runApp(
     const ProviderScope(
       child: KITCampusAIApp(),
@@ -34,7 +35,7 @@ class KITCampusAIApp extends ConsumerWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
-        fontFamily: 'Poppins',
+        // fontFamily: 'Poppins',  // Temporarily disabled
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF1976D2),
           brightness: Brightness.light,
@@ -46,7 +47,7 @@ class KITCampusAIApp extends ConsumerWidget {
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
-        fontFamily: 'Poppins',
+        // fontFamily: 'Poppins',  // Temporarily disabled
         brightness: Brightness.dark,
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF1976D2),

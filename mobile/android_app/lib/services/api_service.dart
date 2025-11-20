@@ -6,7 +6,8 @@ class ApiService {
   final Dio _dio = Dio();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   
-  static const String _baseUrl = 'http://localhost:8000/api/v1';
+  static const String _baseUrl = 'https://kit-campusai-backend.onrender.com/api/v1';
+  //static const String _baseUrl = 'http://localhost:8000/api/v1';
   // For Android emulator use: 'http://10.0.2.2:8000/api/v1'
   
   ApiService() {
