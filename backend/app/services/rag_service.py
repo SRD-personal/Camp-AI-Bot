@@ -214,7 +214,7 @@ class RAGService:
                     1 - (td.embedding <=> '{embedding_str}'::vector) as similarity
                 FROM tool_data td
                 JOIN ai_tools at ON td.tool_id = at.id
-                WHERE at.status = 'active'
+                WHERE at.status = 'ACTIVE'
                 AND td.tool_id = :tool_id
                 AND 1 - (td.embedding <=> '{embedding_str}'::vector) > :threshold
                 ORDER BY td.embedding <=> '{embedding_str}'::vector
@@ -238,7 +238,7 @@ class RAGService:
                     1 - (td.embedding <=> '{embedding_str}'::vector) as similarity
                 FROM tool_data td
                 JOIN ai_tools at ON td.tool_id = at.id
-                WHERE at.status = 'active'
+                WHERE at.status = 'ACTIVE'
                 AND 1 - (td.embedding <=> '{embedding_str}'::vector) > :threshold
                 ORDER BY td.embedding <=> '{embedding_str}'::vector
                 LIMIT :top_k
